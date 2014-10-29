@@ -116,7 +116,6 @@ class ClientThread extends Thread {
 		try {
 			/* check to see whether a file or folder exists */ 
 			if (requestedAccess == Access.NONE) {
-				System.out.println("grrr saldkaslda");
                 if (accessPolicy.containsKey(resourceName)) {
                     ret = Error.FILE_EXISTS;
                 } else {
@@ -133,17 +132,16 @@ class ClientThread extends Thread {
 			    	}
                 }
 			} else {
-				System.out.println("res name " + resourceName  + " ind " + resourceName.indexOf('/'));
+				System.out.println("[Server] res name " + resourceName  + " ind " + resourceName.indexOf('/'));
 				ind = resourceName.indexOf('/');
 		        if (ind != -1) {
 		            /* Check whether the resource is in the user's home
 		             * If so, the user has full access
 		             */
-		        	System.out.println("grrr " + resourceName.substring(0, ind) + " vs user " + username);
 		            if (resourceName.substring(0,ind).equals(username))
 		                return Error.OK;
 		        } else {
-		        	System.out.println("ind = -1??? you crazy mate/?? " + resourceName.indexOf('\\'));
+		        	System.err.println("[Server] ind = -1??? you crazy mate/?? " + resourceName.indexOf('\\'));
 		        }
 				/* Check for read or write access rights */
                 if (accessPolicy.containsKey(resourceName)) {
@@ -155,7 +153,7 @@ class ClientThread extends Thread {
 				
     				while(br.ready()) {
 	    			    String str = br.readLine();
-	    			    System.out.println("[DEBUG] str " + str);
+	    			    System.out.println("[Server] str " + str);
 		    			ind = str.lastIndexOf(' ');
 			    		String file = str.substring(0, ind);
 				    	Right accessRights = new Right(Integer.parseInt(str.substring(ind+1)));
@@ -411,7 +409,8 @@ class ClientThread extends Thread {
          */
          return err;
     }
-    public Error processCommand(String cmd) {
+//	public Error processCommand(String cmd) {
+    public Error processCommand(String cmd, PrintWriter send) {
 		Error err = Error.OK;
 		String []tokens = cmd.split(" ");
 
@@ -420,12 +419,10 @@ class ClientThread extends Thread {
             return Error.ACCESS_DENIED;
 
 		/* Check if the user is recognized in the system */
-        System.out.println("tokens 0 : " + tokens[0] + " tokens 1: " + tokens[1]);
 		err = checkCredentials(tokens[0], tokens[1]);
 	    if (err != Error.OK)
 	    	return err;
 	    
-	    System.out.println("cmd " + tokens[2]);
     	switch(tokens[2]) {
     	case "create":
     		if (tokens.length < 6)
@@ -442,12 +439,16 @@ class ClientThread extends Thread {
     		if (tokens.length < 4)
     			return Error.UNKNOWN_COMMAND;
             Pair<Error, String> ret = readResource(tokens[0], tokens[3]);
-            try {
-				this.socket.getOutputStream().write(ret.getSecond().getBytes());
-			} catch (IOException e) {
+//            try {
+				//this.socket.getOutputStream().write(ret.getSecond().getBytes());
+            	send.println(1);
+            	send.flush();
+            	send.println(ret.getSecond());
+            	send.flush();
+			/*} catch (IOException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
-			}
+			}*/
     		break;
     	case "write":
     		if (tokens.length < 5)
@@ -487,12 +488,12 @@ class ClientThread extends Thread {
         		/* Execute the commands */
         		
         		/* Send the response to the client */
-                err = processCommand(command);
-                System.out.println(err + " : " + err.ordinal());
+//                err = processCommand(command);
+                err = processCommand(command, send);
+                System.out.println("[Server] " + err + "=-" + err.ordinal());
             	send.println(-err.ordinal());
             	send.flush();
         	}
-        	
         	
         	/* Close the connection */
         	recv.close();

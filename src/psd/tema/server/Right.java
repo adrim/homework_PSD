@@ -3,9 +3,9 @@ package psd.tema.server;
 
 public class Right {
 	static final int none	 = 0;
-	static final int read	 = 1;
+	static final int read	 = 4;
 	static final int write 	 = 2;
-	static final int execute = 4;
+	static final int execute = 1;
 	
 	private Integer userAccess;
 	
@@ -13,7 +13,7 @@ public class Right {
 		userAccess = none;
 	}
 	Right(int accessLevel) {
-		if (accessLevel != read && accessLevel != write && accessLevel != execute)
+		if (accessLevel < 0 && accessLevel > 6)
 			userAccess = none;
 		else
 			userAccess = accessLevel;
@@ -29,8 +29,8 @@ public class Right {
 		return ((userAccess & execute) == 0 ? false : true);
 	}
 	public boolean hasAccess(Access access) {
-		System.out.println("[DEBUG] userAccess: can read " + this.canRead() + 
-				"can write " + this.canWrite());
+		System.out.println("[Server] userAccess=" + userAccess + "; can read=" + this.canRead() + 
+				"; can write=" + this.canWrite());
 		
 		switch(access) {
 		case NONE:
