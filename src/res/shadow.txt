@@ -1,2 +1,7 @@
 alice alice
 bob bob
+sam sam
+adi adi
+rob rob
+john snow
+aria stark

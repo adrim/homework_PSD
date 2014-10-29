@@ -1,0 +1,4 @@
+bob bob read alice/alicefile999a
+bob bob create bob/alicefile111 1 ssssss
+bob bob create bob/alicefile111/abcdar 1 ssssss
+bob bob read bob/alicefile111

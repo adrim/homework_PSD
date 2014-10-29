@@ -1,0 +1,22 @@
+alice alice create alice 1 sss
+alice alice create alice/alicefile111 1 ssssss
+alice alice create alice/alicefile111/abcdar 1 ssssss
+alice alice create alice/alicefile121 0 ssssss
+alice alice create alice/alicefile111/aaaa.txt 0 ssssss3
+alice alice create alice/alicefile144 0 ssssss
+alice alice create alice/alicefile999 1 ardgsr
+alice alice create alice/alicefile999a 0 ardgsr
+alice alice create alice/alicefile999b 0 ardgsr
+alice alice create alice/alicefile999c 1 ardgsra
+alice alice create alice/alicefile999d 0 ardgsr
+alice alice create alice/alicefile999e 1 ardgsr
+alice alice create alice/alicefile999f 0 ardgsr
+alice alice create alice/alicefile999g 1 ardgsr
+alice alice delete alice/alicefile999f
+alice alice delete alice/alicefile999g
+alice alice changeRights alice/alicefile999a RDWR
+alice alice write alice/alicefile144 Tobeornottobethatisthequestion
+alice alice read alice/alicefile999a
+alice alice create alice/alicefile999f 
+
+raul raul unul doi trei

@@ -17,7 +17,10 @@ import java.nio.file.Files;
 import java.nio.file.attribute.FileAttribute;
 import java.nio.file.spi.FileTypeDetector;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Random;
 
 import utils.Node;
@@ -46,11 +49,10 @@ class AccessLevel {
 class ClientThread extends Thread {
 //	private static final String res = Server.class.
 	private static final String res			= "resources/";
-	private static final String listOfFiles = "resources/files.txt";
 	private static final String shadow 	 	= "resources/shadow.txt";
 	private static final String access  	= "resources/access.txt";
-    private static HashMap<String, Right> accessPolicy =
-                            new HashMap<String, Right>();
+    private static Map<String, Right> accessPolicy = null;
+//    		Collections.synchronizedMap(new HashMap<String, Right>());
     private static HashMap<String, String> shadowFile =
                             new HashMap<String, String>();
 
@@ -63,7 +65,66 @@ class ClientThread extends Thread {
 	public ClientThread(Socket socket) {
 		this.socket = socket;
 		this.random = new Random();
+		
+		readPolicy();
 	}
+	
+	private static void readPolicy() {
+		if (accessPolicy != null)
+			return;
+		
+		BufferedReader br;
+		try {
+			br = new BufferedReader(new FileReader(access));
+			accessPolicy = Collections.synchronizedMap(new HashMap<String, Right>());
+			
+			while(br.ready()) {
+			    String  str = br.readLine();
+				Integer ind = str.lastIndexOf(' ');
+	    		String file = str.substring(0, ind);
+		    	Right accessRights = new Right(Integer.parseInt(str.substring(ind+1)));
+			
+			    /* If the user doesn't have the privileges requested, return ACCESS_DENIED error */
+				
+		    	accessPolicy.put(file, accessRights);
+	    	}
+			br.close();
+		} catch (FileNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+	private static void writePolicy() {
+		PrintWriter pw;
+		try {
+			pw = new PrintWriter(access);
+			
+			for (Entry<String, Right> entry : accessPolicy.entrySet()) {
+		    	pw.println(entry.getKey() + ' ' + entry.getValue().getAccess());
+	    	}
+			pw.close();
+		} catch (FileNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+	
+	/**
+	 * Read credentials from file
+	 * 
+	 * ** ToDo **
+	 * Keep [part of] them in memory
+	 * 
+	 * @param username
+	 * @param password
+	 * @return
+	 */
 	private Error checkCredentials(String username, String password) {
 		BufferedReader br = null;
 		Error ret = Error.INVALID_CREDENTIALS;
@@ -109,84 +170,53 @@ class ClientThread extends Thread {
 	}
 
     private Error checkAccess(String username, String resourceName, Access requestedAccess) {
-		BufferedReader br = null;
 		Error   ret = Error.OK;
 		Integer ind = -1;
 
-		try {
-			/* check to see whether a file or folder exists */ 
-			if (requestedAccess == Access.NONE) {
-                if (accessPolicy.containsKey(resourceName)) {
-                    ret = Error.FILE_EXISTS;
-                } else {
-                	String str;
-                	
-    				br = new BufferedReader(new FileReader(access));
-	    			while(br.ready()) {
-			    		str = br.readLine();
-				    	
-					    if (str.substring(0, str.lastIndexOf(' ')).equals(resourceName)) {
-						    ret = Error.FILE_EXISTS;
-	    					break;
-		    			}
-			    	}
-                }
-			} else {
-				System.out.println("[Server] res name " + resourceName  + " ind " + resourceName.indexOf('/'));
-				ind = resourceName.indexOf('/');
-		        if (ind != -1) {
-		            /* Check whether the resource is in the user's home
-		             * If so, the user has full access
-		             */
-		            if (resourceName.substring(0,ind).equals(username))
-		                return Error.OK;
-		        } else {
-		        	System.err.println("[Server] ind = -1??? you crazy mate/?? " + resourceName.indexOf('\\'));
-		        }
-				/* Check for read or write access rights */
+		/* check to see whether a file or folder exists */ 
+		if (requestedAccess == Access.NONE) {
+            if (accessPolicy.containsKey(resourceName)) {
+                ret = Error.FILE_EXISTS;
+            }
+		} else {
+			ind = resourceName.indexOf('/');
+	        if (ind != -1) {
+	            /* Check whether the resource is in the user's home
+	             * If so, the user has full access
+	             */
+	            if (resourceName.substring(0,ind).equals(username))
+	                return Error.OK;
+	        } else {
+	        	System.err.println("[Server] ind = -1??? " + resourceName.indexOf('\\'));
+	        }
+			/* Check for read or write access rights */
+	        synchronized (accessPolicy) {
                 if (accessPolicy.containsKey(resourceName)) {
                 	Right accessRights = accessPolicy.get(resourceName);
                     ret = accessRights.hasAccess(requestedAccess) ? Error.OK : Error.ACCESS_DENIED;
                 } else {
-				    br  = new BufferedReader(new FileReader(access));
-                    ret = Error.ACCESS_DENIED;
-				
-    				while(br.ready()) {
-	    			    String str = br.readLine();
-	    			    System.out.println("[Server] str " + str);
-		    			ind = str.lastIndexOf(' ');
-			    		String file = str.substring(0, ind);
-				    	Right accessRights = new Right(Integer.parseInt(str.substring(ind+1)));
-					
-					    /* If the user doesn't have the privileges requested, return ACCESS_DENIED error */
-    					if (file.equals(resourceName)) {
-	    					ret = accessRights.hasAccess(requestedAccess) ? Error.OK : Error.ACCESS_DENIED;
-                            accessPolicy.put(resourceName, accessRights);
-		    			}
-			    	}
-                }
-			}
-		} catch (FileNotFoundException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (Exception e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} finally {
-			try {
-				if (br != null)
-				br.close();
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-        }
+                	ret = Error.OK;
+		        }
+	        }
+		}
 		return ret;
 	}
 	
+    private Right getAccess(String username, String resourceName) {
+    	Right accessLevel = new Right();
+    	
+    	Integer ind = resourceName.indexOf('/');
+        if (ind != -1) {
+            /* Check whether the resource is in the user's home
+             * If so, the user has full access
+             */
+            if (resourceName.substring(0,ind).equals(username))
+                return new Right(Access.READ_WRITE);
+        }
+    	
+    	return accessPolicy.get(resourceName);
+    }
+    
 	/**
 	 * 
 	 * @param username Username making the request
@@ -194,21 +224,21 @@ class ClientThread extends Thread {
 	 * @param resName  Path of the desired resource
 	 * @param type     Type of res: 0 for files, 1 for directories
 	 * @param value    Value to be written to file, ignored for directories
-	 * @return Error cde
+	 * @return Error
 	 */
 	private Error createResource(String username, String resName, int type, String value) {
-		Error ret = Error.UNKNOWN_ERROR;
+		Error ret = Error.ACCESS_DENIED;
 		File f;
 		PrintWriter pw;
+		Right accessLevel;
 		
 		f = new File(res + resName);
 		if (f.exists())
 			return Error.FILE_EXISTS;
 		
 		/* A user can create a resource if he's the owner or has WRITE
-		 * permission on the directory 
+		 * permission on the parent directory 
 		 */
-		//ret = checkAccess(username, resName.substring(0, resName.lastIndexOf('/')), Access.WRITE);
 		ret = checkAccess(username, resName, Access.WRITE);
 		if (ret != Error.OK)
 			return ret;
@@ -222,35 +252,35 @@ class ClientThread extends Thread {
 				pw.close();
 			} else {
 				f.mkdirs();
-				pw = new PrintWriter(new FileWriter(access, true));
-				pw.append(resName + ' ' + Right.write + '\n');
-				pw.flush();
-				pw.close();
 			}
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+		/* Don't give other users permission for your files */
+		accessPolicy.put(resName, new Right());
 		return Error.OK;
 	}
-	private Pair<Error, String> readResource(String username, String resourceName) {
+	private Pair<Error, ArrayList<String>> readResource(String username, String resourceName) {
 		Error 	ret = checkAccess(username, resourceName, Access.READ);
-        String	value = "";
-        
-        if (ret != Error.OK)
-            return new Pair<Error, String>(ret, value);
+
+		if (ret != Error.OK)
+            return new Pair<Error, ArrayList<String>>(ret, null);
 		
         File f = new File(res + resourceName);
+        ArrayList<String> value = new ArrayList<String>();
         
         /* Read on the directory is equivalent to list files */
         if (f.isDirectory()) {
+        	String []elements = f.list();
+        	Collections.addAll(value, elements);
 		} else {
 			/* Read the file */
 	        try {
 				BufferedReader br = new BufferedReader(new FileReader(f));
 				
 				while (br.ready())
-					value += br.readLine();
+					value.add(br.readLine());
 				
 				br.close();
 			} catch (FileNotFoundException e) {
@@ -261,7 +291,7 @@ class ClientThread extends Thread {
 				e.printStackTrace();
 			}
 		}
-		return new Pair<Error, String>(ret, value);
+		return new Pair<Error, ArrayList<String>>(ret, value);
 	}
 	private Error writeResource(String username, String resourceName,
 								String value) {
@@ -299,39 +329,11 @@ class ClientThread extends Thread {
             return ret;
         
         /* Delete the file or folder and remove it from the access policy */
-        try {
-        	if (path.isDirectory() && path.list().length > 0)
-        		return Error.FOLDER_NOT_EMPTY;
-        	
-            System.out.println("Delete? " + path.delete());
-
-            String str = null;
-			Integer ind;
-            File in  = new File(access);
-            File out = new File(access + ".tmp");
-
-            BufferedReader br = new BufferedReader(new FileReader(in));
-            PrintWriter    pw = new PrintWriter(out);
-
-            while (br.ready()) {
-                str = br.readLine();
-				ind = str.lastIndexOf(' ');
-					
-                /* copy other files to the temporary file */
-                if (!str.substring(0, ind).equals(resourcePath)) {
-                    pw.println(str);
-                }
-            }
-            br.close();
-            pw.close();
-            
-            /* delete old access file and replace it with the new temp file */
-            in.delete();
-            out.renameTo(in);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
+    	if (path.isDirectory() && path.list().length > 0)
+    		return Error.FOLDER_NOT_EMPTY;
+    	
+    	accessPolicy.remove(resourcePath);
+    	
         return ret;
     }
 
@@ -346,68 +348,21 @@ class ClientThread extends Thread {
      * @return Error code
      */
 	private Error changeRights(String username, String resourcePath, String newRights) {
-        boolean found = false;
-		Error err;
-        Access requestAccess = Access.NONE;
-
-        if (newRights.equals("RDONLY"))
-            requestAccess = Access.READ;
-        else if (newRights.equals("WRONLY"))
-            requestAccess = Access.WRITE;
-        else if (newRights.equals("RDWR"))
-            requestAccess = Access.READ_WRITE;
-
-        err = checkAccess(username, resourcePath, requestAccess);
-        
-        if (err != Error.OK)
-            return err;
-
-        try {
-            String str = null;
-            Integer noFiles;
-            File in  = new File(access);
-            File out = new File(access + ".tmp");
-
-            BufferedReader br = new BufferedReader(new FileReader(in));
-            PrintWriter    pw = new PrintWriter(out);
-
-            while (br.ready()) {
-				Integer ind;
-
-                str = br.readLine();
-			    ind = str.lastIndexOf(' ');
-				
-                if (str.substring(0, ind).equals(resourcePath)) {
-                    Integer rights = Integer.parseInt(str.substring(ind)+1);
-                    
-                    found = true;
-                    
-                    /* Change access */
-                    pw.println(str + ' ' + requestAccess.ordinal());
-
-                } else {
-                    /* Copy other files to the temporary file */
-                    pw.println(str);
-                }
-            }
-            if (!found)
-            	pw.println(resourcePath + ' ' + requestAccess.ordinal()*2);
-            br.close();
-            pw.close();
-            
-            /* delete old access file and replace it with the new temp file */
-            in.delete();
-            out.renameTo(in);
-        } catch (IOException e) {
-            e.printStackTrace();
+		Error err = Error.OK;
+        Right accessLevel = new Right(newRights);
+    	
+    	Integer ind = resourcePath.indexOf('/');
+        if (ind != -1) {
+            /* Check whether the resource is in the user's home
+             * If not, the user cannot change the file rights
+             */
+            if (!resourcePath.substring(0,ind).equals(username))
+                return Error.ACCESS_DENIED;
         }
-
-        /* 
-         * If the file or folder is in the user's home, then accept any rights
-         * Otherwise, if
-         *
-         */
-         return err;
+        
+        /* the owner can set the desired access for the other users */
+        accessPolicy.put(resourcePath, accessLevel);
+        return err;
     }
 //	public Error processCommand(String cmd) {
     public Error processCommand(String cmd, PrintWriter send) {
@@ -438,17 +393,18 @@ class ClientThread extends Thread {
     	case "read":
     		if (tokens.length < 4)
     			return Error.UNKNOWN_COMMAND;
-            Pair<Error, String> ret = readResource(tokens[0], tokens[3]);
-//            try {
-				//this.socket.getOutputStream().write(ret.getSecond().getBytes());
-            	send.println(1);
-            	send.flush();
-            	send.println(ret.getSecond());
-            	send.flush();
-			/*} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}*/
+            Pair<Error, ArrayList<String>> ret = readResource(tokens[0], tokens[3]);
+            ArrayList<String> contents = ret.getSecond();
+        	
+            err = ret.getFirst();
+            
+            send.println(contents.size());
+        	send.flush();
+        	
+        	for (String line : contents) {
+	        	send.println(line);
+	        	send.flush();
+        	}
     		break;
     	case "write":
     		if (tokens.length < 5)
@@ -483,13 +439,19 @@ class ClientThread extends Thread {
         	String command;
             Error err = Error.OK;
         	while ((command = recv.readLine()) != null) {
-        	
         		System.out.println("[Server] Command: " + command);
+
+        		if (command.equals("exit")) {
+        			recv.close();
+                	send.close();
+                	socket.close();
+        			writePolicy();
+        		}
+        			
         		/* Execute the commands */
+        		err = processCommand(command, send);
         		
         		/* Send the response to the client */
-//                err = processCommand(command);
-                err = processCommand(command, send);
                 System.out.println("[Server] " + err + "=-" + err.ordinal());
             	send.println(-err.ordinal());
             	send.flush();
@@ -502,10 +464,23 @@ class ClientThread extends Thread {
 		} catch (IOException e){
 			e.printStackTrace();
 		}
+		writePolicy();
 	}
 }
 
 public class Server {
+//	private static final String res = Server.class.
+	private static final String res			= "resources/";
+	private static final String listOfFiles = "resources/files.txt";
+	private static final String shadow 	 	= "resources/shadow.txt";
+	private static final String access  	= "resources/access.txt";
+    private static HashMap<String, Right> accessPolicy =
+                            new HashMap<String, Right>();
+    private static HashMap<String, String> shadowFile =
+                            new HashMap<String, String>();
+
+    private static Node fileSystem = new Node();
+
 	private ArrayList<ClientThread> clients;
 	private ServerSocket serverSock;
 	
@@ -514,9 +489,51 @@ public class Server {
 	public void print(String name) {
 		System.out.println("Client " + name + " is connected");
 	}
-	 
+	private void readPolicy() {
+		BufferedReader br;
+		try {
+			br = new BufferedReader(new FileReader(access));
+			accessPolicy = new HashMap<String, Right>();
+			
+			while(br.ready()) {
+			    String  str = br.readLine();
+				Integer ind = str.lastIndexOf(' ');
+	    		String file = str.substring(0, ind);
+		    	Right accessRights = new Right(Integer.parseInt(str.substring(ind+1)));
+			
+			    /* If the user doesn't have the privileges requested, return ACCESS_DENIED error */
+				
+		    	accessPolicy.put(file, accessRights);
+	    	}
+			br.close();
+		} catch (FileNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+	private void writePolicy() {
+		PrintWriter pw;
+		try {
+			pw = new PrintWriter(access);
+			
+			for (Entry<String, Right> entry : accessPolicy.entrySet()) {
+		    	pw.println(entry.getKey() + ' ' + entry.getValue().getAccess());
+	    	}
+			pw.close();
+		} catch (FileNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
 	public void run() {
 		Socket clientSocket;
+		readPolicy();
 		
 		try {
 			serverSock = new ServerSocket(serverPort);

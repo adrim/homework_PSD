@@ -19,6 +19,30 @@ public class Right {
 			userAccess = accessLevel;
 	}
 	
+	public Right(Access access) {
+		switch (access) {
+		case READ:
+			userAccess = read;
+		case WRITE:
+			userAccess = write;
+			break;
+		case READ_WRITE:
+			userAccess = read | write;
+			break;
+		default:
+			userAccess = none;
+		}
+	}
+	public Right(String newRights) {
+        if (newRights.equals("RDONLY"))
+            userAccess = read;
+        else if (newRights.equals("WRONLY"))
+            userAccess = write;
+        else if (newRights.equals("RDWR"))
+            userAccess = read | write;
+        else
+        	userAccess = none;
+	}
 	public boolean canRead() {
 		return ((userAccess & read) == 0 ? false : true);
 	}

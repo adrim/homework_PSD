@@ -60,6 +60,9 @@ public class Client {
 		    	if (command == null)
 		    		continue;
 			    if (command.equalsIgnoreCase("exit")) {
+			    	send.println(command);
+				    send.flush();
+				    
 			    	send.close();
 				    recv.close();
 			    	console.close();
@@ -74,11 +77,16 @@ public class Client {
 			    response = recv.readLine();
 			    if (response != null) {
 			    	Integer readLines = Integer.parseInt(response);
+			    	if (readLines <= 0) {
+			    		System.out.println("[Client][Status] " + response);
+			    		continue;
+			    	}
 			    	while (readLines > 0) {
 			    		response = recv.readLine();
 			    		System.out.println("[Client][Response] " + response);
 			    		readLines--;
 			    	}
+			    	response = recv.readLine();
 			    	System.out.println("[Client][Status] " + response);
 			    }
 		    }
