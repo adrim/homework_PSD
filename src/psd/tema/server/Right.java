@@ -53,9 +53,6 @@ public class Right {
 		return ((userAccess & execute) == 0 ? false : true);
 	}
 	public boolean hasAccess(Access access) {
-		System.out.println("[Server] userAccess=" + userAccess + "; can read=" + this.canRead() + 
-				"; can write=" + this.canWrite());
-		
 		switch(access) {
 		case NONE:
 			return userAccess == none;
@@ -98,5 +95,8 @@ public class Right {
 			return true;
 		}
 		return false;
+	}
+	public String toString() {
+		return "" + userAccess;
 	}
 }

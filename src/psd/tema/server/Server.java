@@ -47,24 +47,18 @@ class AccessLevel {
 }
 
 class ClientThread extends Thread {
-//	private static final String res = Server.class.
 	private static final String res			= "resources/";
-	private static final String shadow 	 	= "resources/shadow.txt";
-	private static final String access  	= "resources/access.txt";
+	private static final String shadow 	 	= "resources/cntrl/shadow.txt";
+	private static final String access  	= "resources/cntrl/access.txt";
     private static Map<String, Right> accessPolicy = null;
-//    		Collections.synchronizedMap(new HashMap<String, Right>());
     private static HashMap<String, String> shadowFile =
                             new HashMap<String, String>();
-
     private static Node fileSystem = new Node();
 
 	private Socket socket = null;
-	private Random random = null;
-		
 	
 	public ClientThread(Socket socket) {
 		this.socket = socket;
-		this.random = new Random();
 		
 		readPolicy();
 	}
@@ -95,6 +89,11 @@ class ClientThread extends Thread {
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
+		}
+	}
+	private static void showPolicy() {
+		for (Map.Entry<String, Right> entry : accessPolicy.entrySet()) {
+			System.out.println(entry.getKey() + " has right "+ entry.getValue());
 		}
 	}
 	private static void writePolicy() {
@@ -169,37 +168,67 @@ class ClientThread extends Thread {
 		return ret;
 	}
 
-    private Error checkAccess(String username, String resourceName, Access requestedAccess) {
-		Error   ret = Error.OK;
+	/**
+	 * Check whether one of the ancestors of the requested resource has the
+	 * desired access
+	 * 
+	 * @param resParent
+	 * @param requestedAccess
+	 * @return
+	 */
+	private Error checkParentAccess(String resParent, Access requestedAccess) {
+		/* Check for read or write access rights */
+        if (accessPolicy.containsKey(resParent)) {
+            return (accessPolicy.get(resParent).hasAccess(requestedAccess) ?
+            		Error.OK : Error.ACCESS_DENIED);
+        }
+        Integer ind = resParent.lastIndexOf('/');
+		if (ind != -1)
+			return checkParentAccess(resParent.substring(0, ind), requestedAccess);
+	
+    	return Error.ACCESS_DENIED;
+	}
+   
+	/**
+	 * Check whether the resource has the desired access
+	 * 
+	 * @param username Username for which the access rights are verified
+	 * @param resourceName Resource on which the access is verified
+	 * @param requested Access Access requested by username; to be compared to
+	 * 					the access stored for <resourceName>
+	 * @param create If true, we check the access for creating a file and need
+	 * 				 to check the ancestors rights. Otherwise, only the given
+	 * 				 path is checked for the desired access
+	 * @return Error.OK if access was granted, another Error otherwise 
+	 */
+	private Error checkAccess(String username, String resourceName,
+    						  Access requestedAccess, Boolean create) {
 		Integer ind = -1;
-
-		/* check to see whether a file or folder exists */ 
-		if (requestedAccess == Access.NONE) {
-            if (accessPolicy.containsKey(resourceName)) {
-                ret = Error.FILE_EXISTS;
+		String res = "";
+		
+		ind = resourceName.indexOf('/');
+        if (ind != -1) {
+        	res = resourceName.substring(0,ind);
+        } else {
+        	res = resourceName;
+        }
+        /* Check whether the resource is in the user's home
+         * If so, the user has full access
+         */
+        if (res.equals(username)) {
+            return Error.OK;
+        }
+        
+		/* Check for read or write access rights */
+        synchronized (accessPolicy) {
+        	if (create)
+        		return checkParentAccess(resourceName, requestedAccess);
+        	if (accessPolicy.containsKey(resourceName)) {
+                return (accessPolicy.get(resourceName).hasAccess(requestedAccess) ?
+                		Error.OK : Error.ACCESS_DENIED);
             }
-		} else {
-			ind = resourceName.indexOf('/');
-	        if (ind != -1) {
-	            /* Check whether the resource is in the user's home
-	             * If so, the user has full access
-	             */
-	            if (resourceName.substring(0,ind).equals(username))
-	                return Error.OK;
-	        } else {
-	        	System.err.println("[Server] ind = -1??? " + resourceName.indexOf('\\'));
-	        }
-			/* Check for read or write access rights */
-	        synchronized (accessPolicy) {
-                if (accessPolicy.containsKey(resourceName)) {
-                	Right accessRights = accessPolicy.get(resourceName);
-                    ret = accessRights.hasAccess(requestedAccess) ? Error.OK : Error.ACCESS_DENIED;
-                } else {
-                	ret = Error.OK;
-		        }
-	        }
-		}
-		return ret;
+        }
+		return Error.ACCESS_DENIED;
 	}
 	
     private Right getAccess(String username, String resourceName) {
@@ -218,19 +247,21 @@ class ClientThread extends Thread {
     }
     
 	/**
+	 * Create a new resource
 	 * 
-	 * @param username Username making the request
-	 * @param password Password of the user
+	 * @param username Username issuing the command
 	 * @param resName  Path of the desired resource
 	 * @param type     Type of res: 0 for files, 1 for directories
 	 * @param value    Value to be written to file, ignored for directories
-	 * @return Error
+	 * @return		   Error.OK if write was successful, or another Error
+	 * 				   otherwise
 	 */
 	private Error createResource(String username, String resName, int type, String value) {
-		Error ret = Error.ACCESS_DENIED;
-		File f;
+		Error 	ret = Error.ACCESS_DENIED;
+		File 	f;
+		Integer ind;
+		String 	resource;
 		PrintWriter pw;
-		Right accessLevel;
 		
 		f = new File(res + resName);
 		if (f.exists())
@@ -239,7 +270,7 @@ class ClientThread extends Thread {
 		/* A user can create a resource if he's the owner or has WRITE
 		 * permission on the parent directory 
 		 */
-		ret = checkAccess(username, resName, Access.WRITE);
+		ret = checkAccess(username, resName, Access.WRITE, true);
 		if (ret != Error.OK)
 			return ret;
 		
@@ -258,17 +289,44 @@ class ClientThread extends Thread {
 			e.printStackTrace();
 		}
 		/* Don't give other users permission for your files */
-		accessPolicy.put(resName, new Right());
+		ind = resName.indexOf('/');
+        if (ind != -1) {
+        	resource = resName.substring(0,ind);
+        } else {
+        	resource = resName;
+        }
+        /* Check whether the resource is created in the user's home
+         * If so, create it without rights
+         * Otherwise, create with read write
+         */
+        if (resource.equals(username)) {
+        	accessPolicy.put(resName, new Right());
+        } else {
+        	accessPolicy.put(resName, new Right("RDWR"));
+        }
+//		System.out.println(accessPolicy.toString());
 		return Error.OK;
 	}
+	
+	/**
+	 * Read a resource
+	 * 
+	 * @param username Username issuing the command
+	 * @param resourceName Resource to be read
+	 * @return  Pair of ((Error.OK if read was successful / other Error),
+	 * 					 the result of reading the resource)
+	 */
 	private Pair<Error, ArrayList<String>> readResource(String username, String resourceName) {
-		Error 	ret = checkAccess(username, resourceName, Access.READ);
-
+		Error ret;
+		File  f = new File(res + resourceName);
+        ArrayList<String> value = new ArrayList<String>();
+        
+		if (!f.exists())
+			return new Pair<Error, ArrayList<String>>(Error.FILE_NOT_FOUND, value);
+		
+		ret = checkAccess(username, resourceName, Access.READ, false);
 		if (ret != Error.OK)
             return new Pair<Error, ArrayList<String>>(ret, null);
-		
-        File f = new File(res + resourceName);
-        ArrayList<String> value = new ArrayList<String>();
         
         /* Read on the directory is equivalent to list files */
         if (f.isDirectory()) {
@@ -293,17 +351,30 @@ class ClientThread extends Thread {
 		}
 		return new Pair<Error, ArrayList<String>>(ret, value);
 	}
+	
+	/**
+	 * Write a value to a resource
+	 * 
+	 * @param username User issuing the command
+	 * @param resourceName Resource whose contents are to be modified
+	 * @param value The value to be written in the resource
+	 * @return Error.OK if write was successful, or another Error otherwise
+	 */
 	private Error writeResource(String username, String resourceName,
 								String value) {
-		Error ret	= checkAccess(username, resourceName, Access.WRITE);
-        File f		= new File(res + resourceName);
+		Error ret; 
+        File  f = new File(res + resourceName);
         
-        if (ret != Error.OK)
-            return ret;
+        if (!f.exists())
+        	return Error.FILE_NOT_FOUND;
         
-        /* Can't write to a directory */
+    	/* Can't write to a directory */
         if (f.isDirectory())
         	return Error.ACCESS_DENIED;
+        	
+        ret = checkAccess(username, resourceName, Access.WRITE, false);
+        if (ret != Error.OK)
+            return ret;
         
         /* Write value to file */
         try {
@@ -317,22 +388,31 @@ class ClientThread extends Thread {
 
         return ret;
 	}
-    private Error deleteResource(String username, String resourcePath) {
+    
+	/**
+	 * Delete a resource
+	 * 
+	 * @param username User issuing the delete command 
+	 * @param resourcePath Path towards the resource
+	 * @return Error.OK if everything went well or another Error otherwise
+	 */
+	private Error deleteResource(String username, String resourcePath) {
 		Error ret; 
         File path = new File(res + resourcePath);
         
         if (!path.exists())
     		return Error.FILE_NOT_FOUND;
         
-        ret = checkAccess(username, resourcePath, Access.WRITE);
+        ret = checkAccess(username, resourcePath, Access.WRITE, false);
         if (ret != Error.OK)
             return ret;
         
         /* Delete the file or folder and remove it from the access policy */
-    	if (path.isDirectory() && path.list().length > 0)
+    	if (path.isDirectory() && path.list().length > 0) {
     		return Error.FOLDER_NOT_EMPTY;
-    	
+    	}
     	accessPolicy.remove(resourcePath);
+    	path.delete();
     	
         return ret;
     }
@@ -348,25 +428,56 @@ class ClientThread extends Thread {
      * @return Error code
      */
 	private Error changeRights(String username, String resourcePath, String newRights) {
-		Error err = Error.OK;
-        Right accessLevel = new Right(newRights);
+    	String resource;
+    	Error err = Error.OK;
+    	Right accessLevel = new Right(newRights);
+    	
+    	/* Check whether the file exists or not */
+        File  f = new File(res + resourcePath);        
+        if (!f.exists())
+        	return Error.FILE_NOT_FOUND;
     	
     	Integer ind = resourcePath.indexOf('/');
-        if (ind != -1) {
-            /* Check whether the resource is in the user's home
-             * If not, the user cannot change the file rights
-             */
-            if (!resourcePath.substring(0,ind).equals(username))
-                return Error.ACCESS_DENIED;
+        if (ind == -1) {
+        	resource = resourcePath;
+        } else {
+        	resource = resourcePath.substring(0,ind);
         }
+        /* Check whether the resource is in the user's home
+         * If not, the user cannot change the file rights
+         */
+        if (!resource.equals(username))
+            return Error.ACCESS_DENIED;
         
         /* the owner can set the desired access for the other users */
         accessPolicy.put(resourcePath, accessLevel);
         return err;
     }
-//	public Error processCommand(String cmd) {
-    public Error processCommand(String cmd, PrintWriter send) {
+	
+	/**
+	 * Remove last '/' from file in order to recognize both strings ending
+	 * in '/' or not
+	 * 
+	 * @param fileName Raw filename
+	 * @return Filename with the trailing '/' removed
+	 */
+	private String processFileName(String fileName) {
+		if (fileName.charAt(fileName.length() - 1) == '/') {
+			return fileName.substring(0, fileName.length() - 1);
+		}
+		return fileName;
+	}
+    
+	/**
+	 * Process the commands received from a client
+	 *  
+	 * @param cmd Command to be executed
+	 * @param send
+	 * @return
+	 */
+	public Error processCommand(String cmd, PrintWriter send) {
 		Error err = Error.OK;
+		String 	 fileName;
 		String []tokens = cmd.split(" ");
 
         /* The user needs to authenticate + command + resource */
@@ -382,39 +493,50 @@ class ClientThread extends Thread {
     	case "create":
     		if (tokens.length < 6)
     			return Error.UNKNOWN_COMMAND;
-            err = createResource(tokens[0], tokens[3],
+    		fileName = processFileName(tokens[3]);
+            err = createResource(tokens[0], fileName,
             					 Integer.parseInt(tokens[4]), tokens[5]);
     		break;
     	case "delete":
     		if (tokens.length < 4)
     			return Error.UNKNOWN_COMMAND;
-            err = deleteResource(tokens[0], tokens[3]);
+    		fileName = processFileName(tokens[3]);
+            err = deleteResource(tokens[0], fileName);
     		break;
     	case "read":
     		if (tokens.length < 4)
     			return Error.UNKNOWN_COMMAND;
-            Pair<Error, ArrayList<String>> ret = readResource(tokens[0], tokens[3]);
+    		fileName = processFileName(tokens[3]);
+            Pair<Error, ArrayList<String>> ret = readResource(tokens[0], fileName);
             ArrayList<String> contents = ret.getSecond();
         	
             err = ret.getFirst();
-            
-            send.println(contents.size());
-        	send.flush();
+            if (contents != null && contents.size() > 0) {
+            	send.println(contents.size());
+        		send.flush();
+        		
+        		for (String line : contents) {
+    	        	send.println(line);
+    	        	send.flush();
+            	}
+    		}
         	
-        	for (String line : contents) {
-	        	send.println(line);
-	        	send.flush();
-        	}
     		break;
     	case "write":
     		if (tokens.length < 5)
     			return Error.UNKNOWN_COMMAND;
-            err = writeResource(tokens[0], tokens[3], tokens[4]);
+    		fileName = processFileName(tokens[3]);
+            err 	 = writeResource(tokens[0], fileName, tokens[4]);
     		break;
-    	case "changeRights":
+    	case "change":
     		if (tokens.length < 5)
     			return Error.UNKNOWN_COMMAND;
-            err = changeRights(tokens[0], tokens[3], tokens[4]);
+    		fileName = processFileName(tokens[3]);
+            err 	 = changeRights(tokens[0], fileName, tokens[4]);
+    		break;
+    	case "show":
+    		/** DEBUGGING ONLY */
+    		showPolicy();
     		break;
     	default:
     		return Error.UNKNOWN_COMMAND;
@@ -439,20 +561,19 @@ class ClientThread extends Thread {
         	String command;
             Error err = Error.OK;
         	while ((command = recv.readLine()) != null) {
-        		System.out.println("[Server] Command: " + command);
+        		System.out.println("[Server][Command] " + command);
 
         		if (command.equals("exit")) {
         			recv.close();
                 	send.close();
                 	socket.close();
-        			writePolicy();
         		}
         			
         		/* Execute the commands */
         		err = processCommand(command, send);
         		
         		/* Send the response to the client */
-                System.out.println("[Server] " + err + "=-" + err.ordinal());
+                System.out.println("[Server][Status] " + err + "=-" + err.ordinal());
             	send.println(-err.ordinal());
             	send.flush();
         	}
@@ -464,22 +585,15 @@ class ClientThread extends Thread {
 		} catch (IOException e){
 			e.printStackTrace();
 		}
-		writePolicy();
 	}
 }
 
 public class Server {
-//	private static final String res = Server.class.
 	private static final String res			= "resources/";
-	private static final String listOfFiles = "resources/files.txt";
 	private static final String shadow 	 	= "resources/shadow.txt";
 	private static final String access  	= "resources/access.txt";
     private static HashMap<String, Right> accessPolicy =
                             new HashMap<String, Right>();
-    private static HashMap<String, String> shadowFile =
-                            new HashMap<String, String>();
-
-    private static Node fileSystem = new Node();
 
 	private ArrayList<ClientThread> clients;
 	private ServerSocket serverSock;
@@ -533,7 +647,6 @@ public class Server {
 	}
 	public void run() {
 		Socket clientSocket;
-		readPolicy();
 		
 		try {
 			serverSock = new ServerSocket(serverPort);
@@ -554,11 +667,7 @@ public class Server {
 		}
 	}
 	
-	
 	public static void main(String[] args) {
-		// TODO Auto-generated method stub
-		
-		//clients = new ArrayList<String>();
 		Server server = new Server();
 		server.run();
 	}

@@ -1,11 +1,10 @@
 package psd.tema.client;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.Socket;
 
@@ -100,6 +99,18 @@ public class Client {
 		this.cmdFile = cmdFile;
 	}
 
+	private void removeChildren(File directory) {
+		if (directory.isDirectory()) {
+			for (File child : directory.listFiles())
+				removeChildren(child);
+		}
+		directory.delete();
+	}
+	private void emptyHome() {
+		File f = new File("resources/" + this.name);
+    	for (File child : f.listFiles())
+    		removeChildren(child);
+	}
 	public void runTestFile() {
 		if (this.cmdFile.isEmpty()) {
 			System.err.println("[" + name +
@@ -111,8 +122,9 @@ public class Client {
 		String command, response;
     	BufferedReader cmdBuffer, recv;
     	PrintWriter send;
-    	
+    	Boolean desiredStatus = null;
 	    try {
+	    	emptyHome();
 	    	cmdBuffer = new BufferedReader(new FileReader(cmdFile));
 			
 	    	System.out.println("[" + name + "] Connecting client at address " +
@@ -127,7 +139,8 @@ public class Client {
 
 		    while (cmdBuffer.ready()) {
 		    	/* Read commands from the test file */
-		    	command = cmdBuffer.readLine(); 
+		    	command = cmdBuffer.readLine().trim();
+		    	desiredStatus = new Boolean(cmdBuffer.readLine());
 		    	if (command == null)
 		    		continue;
 		    	
@@ -148,12 +161,28 @@ public class Client {
 			    response = recv.readLine();
 			    if (response != null) {
 			    	Integer readLines = Integer.parseInt(response);
+			    	if (readLines <= 0) {
+			    		System.out.println("[" +name + "][Status] " + response);
+			    		if ((Integer.parseInt(response) == 0 && desiredStatus) ||
+				    		(Integer.parseInt(response) < 0 && (!desiredStatus))) {
+				    		System.out.println("..................... [PASSED]...................");
+			    		} else {
+				    		System.out.println(".....................:( [FAILED] :)...................");
+				    	}
+			    		continue;
+			    	}
 			    	while (readLines > 0) {
 			    		response = recv.readLine();
 			    		System.out.println("[" +name + "][Reply] " + response);
 			    		readLines--;
 			    	}
+			    	response = recv.readLine();
 			    	System.out.println("[" +name + "][Status] " + response);
+			    	if ((Integer.parseInt(response) == 0 && desiredStatus) ||
+			    		(Integer.parseInt(response) == 0 && (!desiredStatus)))
+			    		System.out.println("..................... [PASSED]...................");
+			    	else
+			    		System.out.println(".....................:( [FAILED] :)...................");
 			    }
 			    
 		    }
@@ -164,8 +193,9 @@ public class Client {
 	}
 	
 	public static void main(String[] args) {
-        Client alice = new Client();
+		Client alice = new Client();
         alice.setName("alice");
-        alice.run();
+//        alice.setTestFile("resources/test/alice_cmds.txt");
+        alice.runTestFile();
 	}
 }
