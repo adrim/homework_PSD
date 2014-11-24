@@ -55,12 +55,17 @@ class ClientThread extends Thread {
                             new HashMap<String, String>();
     private static Node fileSystem = new Node();
 
-	private Socket socket = null;
+	private Socket 							socket		= null;
+	private AuthenticateAndAuthorizeServer 	authServer 	= null;
 	
 	public ClientThread(Socket socket) {
 		this.socket = socket;
 		
 		readPolicy();
+	}
+	public ClientThread(Socket socket, AuthenticateAndAuthorizeServer authServer) {
+		this.socket		= socket;
+		this.authServer = authServer;
 	}
 	
 	private static void readPolicy() {
@@ -115,59 +120,25 @@ class ClientThread extends Thread {
 	}
 	
 	/**
-	 * Read credentials from file
-	 * 
-	 * ** ToDo **
-	 * Keep [part of] them in memory
+	 * Check credentials in the database
 	 * 
 	 * @param username
 	 * @param password
-	 * @return
+	 * @return Error.OK if authentication was successful
 	 */
 	private Error checkCredentials(String username, String password) {
-		BufferedReader br = null;
-		Error ret = Error.INVALID_CREDENTIALS;
-		
 		try {
-			br = new BufferedReader(new FileReader(shadow));
-			while(br.ready()) {
-				// username
-				String user = br.readLine();
-				Integer splitIndex = user.indexOf(' ');
-				
-				assert splitIndex > 0 : "[Server] Corrupt shadow file.";
-				
-				/* Invalid password */
-				if (user.substring(0, splitIndex).equals(username)) {
-					if (!user.substring(splitIndex+1).equals(password)) {
-						ret = Error.INVALID_CREDENTIALS;
-					} else {
-						ret = Error.OK;
-					}
-					
-					br.close();
-					return ret;
-				}
-			}
-			/* Username and password not found on the server */
-		} catch (FileNotFoundException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} finally {
-			try {
-				if (br != null)
-				br.close();
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-        }
-		return ret;
+			Integer resp = authServer.authenticate(username, password);
+			System.out.println("resp " + resp);
+		} catch (Exception e) {
+			System.err.println(e.getMessage());
+			return Error.INVALID_CREDENTIALS;
+		}
+			
+		return Error.OK;
 	}
 
+	
 	/**
 	 * Check whether one of the ancestors of the requested resource has the
 	 * desired access
@@ -201,7 +172,7 @@ class ClientThread extends Thread {
 	 * 				 path is checked for the desired access
 	 * @return Error.OK if access was granted, another Error otherwise 
 	 */
-	private Error checkAccess(String username, String resourceName,
+	private Error checkAccessOLD(String username, String resourceName,
     						  Access requestedAccess, Boolean create) {
 		Integer ind = -1;
 		String res = "";
@@ -232,8 +203,6 @@ class ClientThread extends Thread {
 	}
 	
     private Right getAccess(String username, String resourceName) {
-    	Right accessLevel = new Right();
-    	
     	Integer ind = resourceName.indexOf('/');
         if (ind != -1) {
             /* Check whether the resource is in the user's home
@@ -270,7 +239,7 @@ class ClientThread extends Thread {
 		/* A user can create a resource if he's the owner or has WRITE
 		 * permission on the parent directory 
 		 */
-		ret = checkAccess(username, resName, Access.WRITE, true);
+		ret = authServer.checkAccess(username, resName, Access.WRITE.name(), true);
 		if (ret != Error.OK)
 			return ret;
 		
@@ -288,22 +257,16 @@ class ClientThread extends Thread {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		/* Don't give other users permission for your files */
-		ind = resName.indexOf('/');
-        if (ind != -1) {
-        	resource = resName.substring(0,ind);
-        } else {
-        	resource = resName;
-        }
+
         /* Check whether the resource is created in the user's home
          * If so, create it without rights
          * Otherwise, create with read write
          */
-        if (resource.equals(username)) {
+/*        if (resource.equals(username)) {
         	accessPolicy.put(resName, new Right());
         } else {
         	accessPolicy.put(resName, new Right("RDWR"));
-        }
+        }*/
 //		System.out.println(accessPolicy.toString());
 		return Error.OK;
 	}
@@ -324,7 +287,7 @@ class ClientThread extends Thread {
 		if (!f.exists())
 			return new Pair<Error, ArrayList<String>>(Error.FILE_NOT_FOUND, value);
 		
-		ret = checkAccess(username, resourceName, Access.READ, false);
+		ret = authServer.checkAccess(username, resourceName, Access.READ.name(), false);
 		if (ret != Error.OK)
             return new Pair<Error, ArrayList<String>>(ret, null);
         
@@ -342,10 +305,8 @@ class ClientThread extends Thread {
 				
 				br.close();
 			} catch (FileNotFoundException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
 			} catch (IOException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
 		}
@@ -372,7 +333,7 @@ class ClientThread extends Thread {
         if (f.isDirectory())
         	return Error.ACCESS_DENIED;
         	
-        ret = checkAccess(username, resourceName, Access.WRITE, false);
+        ret = authServer.checkAccess(username, resourceName, Access.WRITE.name(), false);
         if (ret != Error.OK)
             return ret;
         
@@ -403,7 +364,7 @@ class ClientThread extends Thread {
         if (!path.exists())
     		return Error.FILE_NOT_FOUND;
         
-        ret = checkAccess(username, resourcePath, Access.WRITE, false);
+        ret = authServer.checkAccess(username, resourcePath, Access.WRITE.name(), false);
         if (ret != Error.OK)
             return ret;
         
@@ -520,7 +481,6 @@ class ClientThread extends Thread {
     	        	send.flush();
             	}
     		}
-        	
     		break;
     	case "write":
     		if (tokens.length < 5)
@@ -583,10 +543,11 @@ class ClientThread extends Thread {
         	send.close();
         	socket.close();
 		} catch (IOException e){
-			e.printStackTrace();
+			//e.printStackTrace();
 		}
 	}
 }
+
 
 public class Server {
 	private static final String res			= "resources/";
