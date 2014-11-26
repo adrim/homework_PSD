@@ -4,6 +4,7 @@ import java.sql.*;
 import java.util.ArrayList;
 
 import utils.Pair;
+import utils.Error;
 
 public class Database {
 	Connection conn = null;
@@ -14,7 +15,11 @@ public class Database {
 	private String url 		  = "jdbc:mysql://localhost:3306/";
 	private String jdbcDriver = "com.mysql.jdbc.Driver";
 			
-	public Database() {}
+	public Database() {
+		this.initializeDriver();
+		this.connect();
+	}
+	
 	public Database(Connection conn) {
 		this.conn = conn;
 	}
@@ -54,6 +59,35 @@ public class Database {
 			ps.close();
 		} catch (SQLException e) {
 			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+	/**
+	 * Create resource with no ACL associated
+	 * @param userName The owner of the resource
+	 * @param resourceName The name of the resource to be created
+	 */
+	public void createResource(String resourceName) {
+		String query = "insert into ResourceTable (ResourceName) value (?)";
+		PreparedStatement ps = null;
+		try {
+			ps = conn.prepareStatement(query);
+			ps.setString(1, resourceName);
+			ps.executeUpdate();
+			ps.close();
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+	}
+	public void deleteResource(String resourceName) {
+		String query = "delte from ResourceTable where ResourceName = ?";
+		PreparedStatement ps = null;
+		try {
+			ps = conn.prepareStatement(query);
+			ps.setString(1, resourceName);
+			ps.executeUpdate();
+			ps.close();
+		} catch (SQLException e) {
 			e.printStackTrace();
 		}
 	}
@@ -120,6 +154,7 @@ public class Database {
 			
 			if (rs.next()) {
 				Integer userId  = rs.getInt("UserID");
+				ps.close();
 				return getRolesForUser(userId);
 			}
 			ps.close();
@@ -210,12 +245,29 @@ public class Database {
 		}
 		return response;
 	}
-
 	public ArrayList<Pair<Integer, String>> getUsersWithRole(String roleName) {
-		// TODO Auto-generated method stub
+		String query = " select RoleID from RoleTable where RoleName = ?"; 
+		PreparedStatement ps = null;
+		try {
+			ps = conn.prepareStatement(query);
+			ps.setString(1, roleName);
+			
+			ResultSet rs = ps.executeQuery();
+			
+			if (rs.next()) {
+				Integer roleId  = rs.getInt("RoleID");
+				ps.close();
+				
+				return getUsersWithRole(roleId);
+			}
+			ps.close();
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+		
 		return null;
 	}
-	public void addRight(String rightName) {
+	public boolean createRight(String rightName) {
 		String query = "insert into AccessRightTable (RightName) value (?)";
 		PreparedStatement ps = null;
 
@@ -226,6 +278,178 @@ public class Database {
 			ps.close();
 		} catch (SQLException e) {
 			e.printStackTrace();
+			
+			return false;
 		}
+		return true;
+	}
+	public boolean deleteRight(String rightName) {
+		String query = "delete from AccessRightTable where RightName = ?";
+		PreparedStatement ps = null;
+
+		try {
+			ps = conn.prepareStatement(query);
+			ps.setString(1, rightName);
+			ps.executeUpdate();
+			ps.close();
+		} catch (SQLException e) {
+			e.printStackTrace();
+			
+			return false;
+		}
+		return true;
+	}
+	public void addRightToRes(String resourceName, String roleName, String rightName) {
+		CallableStatement cs;
+
+		try {
+			cs=conn.prepareCall("{call addRights(?,?,?)}");
+			cs.setString(1, resourceName);
+			cs.setString(1, roleName);
+			cs.setString(1, rightName);
+			cs.executeUpdate();
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+	public void addRightToRes2(String roleName, String resourceName, String rightName) {
+		String query =
+				  "insert into ResourceACLTable value"
+				+ " (ifnull((select RoleID 	  from RoleTable 	 where RoleName = ?), "
+				+ "  (select ResourceID from ResourceTable where ResourceName = ?),"
+				+ "  (select RightID    from AccessRightTable where RightName = ?))";
+		PreparedStatement ps;
+		
+		try {
+			ps  = conn.prepareStatement(query);
+
+			ps.setString(1, roleName);
+			ps.setString(2, resourceName);
+			ps.setString(3, rightName);
+			ps.executeUpdate();
+			ps.close();
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+	}
+
+	public void resetFilesInFolder(String resourceName) {
+		String query = 
+				"delete from ResourceTable where ResourceName like ?";
+		String like=resourceName+"/%";
+		PreparedStatement ps;
+		
+		try {
+			ps  = conn.prepareStatement(query);
+
+			ps.setString(1, like);
+			ps.executeUpdate();
+			ps.close();
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+	}
+
+	public boolean addRoleToUser(String roleName, String userName) {
+		String query = " insert into UserRoleTable (UserID, RoleID) values"	 +
+					   " ((select UserID from UserTable where UserName = ?)," +
+					   "  (select RoleID from RoleTable where RoleName = ?))";
+		PreparedStatement ps;
+		
+		try {
+			ps  = conn.prepareStatement(query);
+	
+			ps.setString(1, userName);
+			ps.setString(2, roleName);
+			ps.executeUpdate();
+			ps.close();
+		} catch (SQLException e) {
+			e.printStackTrace();
+			
+			return false;
+		}
+		return true;
+	}
+	public boolean deleteRoleFromUser(String roleName, String userName) {
+		String query = " delete from UserRoleTable "							  +
+					   " where UserID ="										  +
+					   "       (select UserID from UserTable where UserName = ?)" +
+					   "       and RoleID ="									  +
+					   "	    (select RoleID from RoleTable where RoleName = ?)";
+		PreparedStatement ps;
+		
+		try {
+			ps  = conn.prepareStatement(query);
+	
+			ps.setString(1, userName);
+			ps.setString(2, roleName);
+			ps.executeUpdate();
+			ps.close();
+		} catch (SQLException e) {
+			e.printStackTrace();
+			
+			return false;
+		}
+		return true;
+	}	
+	public boolean createRole(String roleName) {
+		String query = "insert into RoleTable(RoleName) values (?)";
+		PreparedStatement ps;
+		try {
+			ps  = conn.prepareStatement(query);
+			ps.setString(1, roleName);
+			ps.executeUpdate();
+			ps.close();
+		} catch (SQLException e) {
+			e.printStackTrace();
+			return false;
+		}
+		return true;
+	}
+	public boolean deleteRole(String roleName) {
+		String query = "delete from RoleTable where RoleName = ?";
+		PreparedStatement ps;
+		
+		try {
+			ps  = conn.prepareStatement(query);
+			ps.setString(1, roleName);
+			ps.executeUpdate();
+			ps.close();
+		} catch (SQLException e) {
+			e.printStackTrace();
+			return false;
+		}
+		return true;		
+	}
+	public boolean createUser(String userName, String password) {
+		String query = "insert into UserTable(UserName, Password) values (?, ?)";
+		PreparedStatement ps;
+		try {
+			ps  = conn.prepareStatement(query);
+	
+			ps.setString(1, userName);
+			ps.setString(2, password);
+			ps.executeUpdate();
+			ps.close();
+		} catch (SQLException e) {
+			e.printStackTrace();
+			return false;
+		}
+		return true;
+	}
+	public boolean deleteUser(String userName) {
+		String query = "delete from UserTable where UserName = ?";
+		PreparedStatement ps;
+		try {
+			ps  = conn.prepareStatement(query);
+			ps.setString(1, userName);
+			ps.executeUpdate();
+			ps.close();
+		} catch (SQLException e) {
+			e.printStackTrace();
+			return false;
+		}
+		return true;
 	}
 }

@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
+import utils.Error;
 
 public class Client {
 
@@ -77,7 +78,7 @@ public class Client {
 			    if (response != null) {
 			    	Integer readLines = Integer.parseInt(response);
 			    	if (readLines <= 0) {
-			    		System.out.println("[Client][Status] " + response);
+			    		System.out.println("[Client][Status] " + Error.values()[-readLines].name());
 			    		continue;
 			    	}
 			    	while (readLines > 0) {
@@ -85,8 +86,8 @@ public class Client {
 			    		System.out.println("[Client][Response] " + response);
 			    		readLines--;
 			    	}
-			    	response = recv.readLine();
-			    	System.out.println("[Client][Status] " + response);
+			    	readLines = Integer.parseInt(recv.readLine());
+			    	System.out.println("[Client][Status] " + Error.values()[-readLines].name());
 			    }
 		    }
 		} catch (IOException e) {

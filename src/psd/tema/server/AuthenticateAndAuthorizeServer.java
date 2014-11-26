@@ -3,16 +3,20 @@ package psd.tema.server;
 import java.util.ArrayList;
 
 import utils.Pair;
+import utils.Error;
 
 public class AuthenticateAndAuthorizeServer {
-	Database db = new Database();
+	private Database db 	   = null;
+	private String 	 adminName = "root";
 	
 	public AuthenticateAndAuthorizeServer() {
+		this.db = new Database();
+	}
+	public AuthenticateAndAuthorizeServer(Database db) {
+		this.db = db;
 	}
 	
 	public Integer authenticate(String userName, String password) throws Exception {
-		System.out.println("username " + userName + " password "+ password);
-	
 		Integer userId = db.authenticate(userName, password);
 		
 		if (userId == null)
@@ -20,18 +24,21 @@ public class AuthenticateAndAuthorizeServer {
 		
 		return userId;
 	}
+	public Integer authenticateAdmin(String userName, String password) throws Exception {
+		if (!userName.equals(adminName)) {
+			throw new Exception("Authentication failed!");
+		}
+		return authenticate(userName, password);
+	}
 	public ArrayList<Integer>getUserRoles(String userName) {
 		return db.getRolesForUser(userName);
 	}
-	
 	public ArrayList<Integer>getUserRoles(Integer userID) {
 		return db.getRolesForUser(userID);
 	}
-	
 	public ArrayList<Pair<Integer, String>> getUsersWithRole(String roleName) {
 		return db.getUsersWithRole(roleName);
 	}
-	
 	public ArrayList<Pair<Integer, String>> getUsersWithRole(Integer roleId) {
 		return db.getUsersWithRole(roleId);
 	}
@@ -57,6 +64,20 @@ public class AuthenticateAndAuthorizeServer {
         }
         return false;
 	}
+	public Error checkAccess(String resourceName, String requestedAccess,
+						     ArrayList<Integer> userRoles) {
+		/* Check for read or write access rights */
+        Error err = db.getAccessToRes(userRoles, requestedAccess, resourceName);
+        
+        if (err == Error.OK)
+        	return err;
+        
+        Integer ind = resourceName.lastIndexOf('/');
+		if (ind != -1)
+			return checkAccess(resourceName.substring(0, ind), requestedAccess, userRoles);
+	
+    	return Error.ACCESS_DENIED;
+    }
 	/**
 	 * Check whether the resource has the desired access
 	 * 
@@ -72,6 +93,7 @@ public class AuthenticateAndAuthorizeServer {
 	public Error checkAccess(Integer userId, String userName, String resourceName,
     						  String requestedAccess, Boolean create) {
 		ArrayList<Integer> userRoles = db.getRolesForUser(userId);
+		Error err;
 		
 		if (isOwner(userName, resourceName)) {
             return Error.OK;
@@ -80,7 +102,12 @@ public class AuthenticateAndAuthorizeServer {
 		if (create)
 			return Error.ACCESS_DENIED;
 		
-		return db.getAccessToRes(userRoles, requestedAccess, resourceName);
+		err =  db.getAccessToRes(userRoles, requestedAccess, resourceName);
+		if (err != Error.OK) {
+			return checkAccess(resourceName, requestedAccess, userRoles);
+		}
+		
+		return err;
 	}
 	
 	public Error checkAccess(String userName,		  String resourceName,
@@ -95,6 +122,5 @@ public class AuthenticateAndAuthorizeServer {
 			return Error.ACCESS_DENIED;
 		
 		return db.getAccessToRes(userRoles, requestedAccess, resourceName);
-	}
-		
+	}	
 }

@@ -1,0 +1,29 @@
+root student createRole OWNER
+root student createRole BASIC
+root student createRole READER
+root student createRole WRITER
+root student createRole ALL_ACCESS
+root student createRole RANDOM_ROLE
+root student deleteRole RANDOM_ROLE
+root student createUser alice alice
+root student createUser bob bob
+root student createUser mary mary
+root student createUser lambda math
+root student createUser delta math
+root student createUser epsilon math
+root student deleteUser epsilon
+root student addRoleToUser READER bob
+root student addRoleToUser WRITER bob
+root student addRoleToUser WRITER mary
+root student addRoleToUser ALL_ACCESS delta
+root student deleteRoleFromUser ALL_ACCESS delta
+
+root student deleteRole NON_EXISTING_ROLE
+root student deleteUser non_existing_user
+root student addRoleToUser READER non_existing_user
+root student addRoleToUser NON_EXISTING_ROLE bob
+root student addRoleToUser NON_EXISTING_ROLE non_existing_user
+root student deleteRoleFromUser READER non_existing_user
+root student deleteRoleFromUser NON_EXISTING_ROLE bob
+root student deleteRoleFromUser NON_EXISTING_ROLE non_existing_user
+
