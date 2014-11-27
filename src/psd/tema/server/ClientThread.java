@@ -427,13 +427,44 @@ public class ClientThread extends Thread {
     		fileName = processFileName(tokens[3]);
 //            err 	 = addRights(tokens[0], fileName, tokens[4], tokens[5]);
     		break;
+    	case "showRoles":
+    		boolean all = true;
+    		if (tokens.length < 6)
+    			return Error.UNKNOWN_COMMAND;
+    		switch (tokens[3]) {
+    		case "existing":
+    			all = true;
+    			break;
+    		case "own":
+    			all = false;
+    			break;
+    		default:
+    			return Error.UNKNOWN_COMMAND;
+    		}
+			Pair<Error, ArrayList<String>> retval = getRoles(tokens[0], all);
+            ArrayList<String> cont = retval.getSecond();
+        	
+            err = retval.getFirst();
+            if (cont != null && cont.size() > 0) {
+            	send.println(cont.size());
+        		send.flush();
+        		
+        		for (String line : cont) {
+    	        	send.println(line);
+    	        	send.flush();
+            	}
+    		}
+            break;
     	default:
-    		err = Error.UNKNOWN_COMMAND;
-    		break;
+    		return adminProcessCommand(cmd, send);
     	}
     	
     	return err;
     }
+	private Pair<Error, ArrayList<String>> getRoles(String userName, boolean all) {
+		return new Pair<Error, ArrayList<String>>
+					(Error.OK, db.getRoleNamesForUser(userName, all));
+	}
 	/**
 	 * Process the commands received from a client
 	 *  
@@ -573,8 +604,6 @@ public class ClientThread extends Thread {
         			
         		/* Execute the commands */
         		err = processCommand(command, send);
-        		if (err != err.OK)
-        			err = adminProcessCommand(command, send);
         		
         		/* Send the response to the client */
                 System.out.println("[Server][Status] " + err + "=-" + err.ordinal());

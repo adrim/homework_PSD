@@ -80,7 +80,7 @@ public class Database {
 		}
 	}
 	public void deleteResource(String resourceName) {
-		String query = "delte from ResourceTable where ResourceName = ?";
+		String query = "delete from ResourceTable where ResourceName = ?";
 		PreparedStatement ps = null;
 		try {
 			ps = conn.prepareStatement(query);
@@ -97,6 +97,8 @@ public class Database {
 					   " where UserName = ? and Password = ?";
 		PreparedStatement ps = null;
 		Integer userId = null;
+		
+		System.out.println("[Database] Authenticating user '" + userName + "'");
 		try {
 			ps = conn.prepareStatement(query);
 			ps.setString(1, userName);
@@ -105,7 +107,6 @@ public class Database {
 			ResultSet rs = ps.executeQuery();
 			
 			while (rs.next()) {
-				System.out.println("---------------");
 				userId  = rs.getInt("UserID");
 			}
 			ps.close();
@@ -115,22 +116,23 @@ public class Database {
 		
 		return userId;
 	}
+	
 	public Error getAccessToRes(ArrayList<Integer> rolesIds, String access, String resourceName) {
-		Array  array;
-		String query = " select RightID" +
-					   " from ResourceACLTable " +
-					   " where RoleID in (?) and RightID = ? and " +
-					   "       ResourceID = " +
-					   "       (select ResourceID from ResourceTable where ResourceName = ?)";
+		String query = " select distinct RightID"						+
+					   " from ResourceACLTable "						+
+					   " where RoleID in (?) and RightID = ? and "		+
+					   "       ResourceID = "							+
+					   "       (select ResourceID from ResourceTable "	+
+					   "		where ? like concat(ResourceName, '%')"	+
+					   "		order by length(ResourceName) desc limit 1)";
+		Error  err = Error.ACCESS_DENIED;
+		String myarr = rolesIds.toString();
 		PreparedStatement ps = null;
-		Error err = Error.ACCESS_DENIED;
-		
+
 		try {
 			ps	  = conn.prepareStatement(query);
-			array = conn.createArrayOf("number", rolesIds.toArray());
-			
-			ps.setArray(1, array);
-			ps.setString(2, access);
+			ps.setString(1, myarr.substring(1, myarr.length()-1));
+			ps.setString(2, access.toUpperCase());
 			ps.setString(3, resourceName);
 			ResultSet rs = ps.executeQuery();
 			
@@ -165,11 +167,7 @@ public class Database {
 		return null;
 	}
 	public ArrayList<Integer> getRolesForUser(Integer userId) {
-		String query = " select RoleID"							+
-					   " from   RoleTable"						+
-					   " where  RoleID = "						+
-					   "	(select RoleID from UserRoleTable"	+
-					   "	 where UserID = ?)";
+		String query = "select RoleID from UserRoleTable where UserID = ?";
 		PreparedStatement ps = null;
 		ArrayList<Integer> response = 
 				new ArrayList<Integer>();
@@ -189,15 +187,15 @@ public class Database {
 		}
 		return response;
 	}
-	public ArrayList<Pair<Integer, String>>	getRolesForUser2(Integer userId) {
-		String query = " select RoleID, RoleName "				+
-					   " from RoleTable"						+
-					   " where RoleID = "						+
+	public ArrayList<String>	getRoleNamesForUser(Integer userId) {
+		String query = " select RoleName "						+
+					   " from   RoleTable  "					+
+					   " where RoleID =  "						+
 					   "	(select RoleID from UserRoleTable"	+
 					   "	 where UserID = ?)";
 		PreparedStatement ps = null;
-		ArrayList<Pair<Integer, String>> response = 
-				new ArrayList<Pair<Integer, String>>();
+		ArrayList<String> response = 
+				new ArrayList<String>();
 		
 		try {
 			ps = conn.prepareStatement(query);
@@ -206,10 +204,39 @@ public class Database {
 			ResultSet rs = ps.executeQuery();
 			
 			while (rs.next()) {
-				Integer roleId  = rs.getInt("RoleID");
 				String roleName = rs.getString("RoleName");
 				
-				response.add(new Pair<Integer, String>(roleId, roleName));
+				response.add(roleName);
+			}
+			ps.close();
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+		return response;
+	}
+	public ArrayList<String>	getRoleNamesForUser(String userName, boolean selectAll) {
+		String query = " select RoleName from RoleTable";
+		if (!selectAll) {
+			query += " where RoleID =  "					+
+					 "	(select RoleID from UserRoleTable"	+
+					 "	 where UserID = "					+
+					 "	      (select UserID from UserTable"+
+					 "		   where UserName = ?)";
+		}
+		PreparedStatement ps = null;
+		ArrayList<String> response = 
+				new ArrayList<String>();
+		
+		try {
+			ps = conn.prepareStatement(query);
+			
+			if (!selectAll) {
+				ps.setString(1, userName);
+			}
+			ResultSet rs = ps.executeQuery();
+			
+			while (rs.next()) {
+				response.add(rs.getString("RoleName"));
 			}
 			ps.close();
 		} catch (SQLException e) {
@@ -305,8 +332,8 @@ public class Database {
 		try {
 			cs=conn.prepareCall("{call addRights(?,?,?)}");
 			cs.setString(1, resourceName);
-			cs.setString(1, roleName);
-			cs.setString(1, rightName);
+			cs.setString(2, roleName);
+			cs.setString(3, rightName);
 			cs.executeUpdate();
 		} catch (SQLException e) {
 			// TODO Auto-generated catch block

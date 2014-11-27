@@ -110,15 +110,15 @@ public class AuthenticateAndAuthorizeServer {
 		return err;
 	}
 	
-	public Error checkAccess(String userName,		  String resourceName,
-   						  	  String requestedAccess, Boolean create) {
+	public Error checkAccess(String userName,		 String resourceName,
+   						  	 String requestedAccess, Boolean create) {
 		ArrayList<Integer> userRoles = db.getRolesForUser(userName);
 		
 		if (isOwner(userName, resourceName)) {
            return Error.OK;
        }
 		/* A user cannot create files and folders in another users' home */
-		if (create)
+		if (create || userRoles.isEmpty())
 			return Error.ACCESS_DENIED;
 		
 		return db.getAccessToRes(userRoles, requestedAccess, resourceName);

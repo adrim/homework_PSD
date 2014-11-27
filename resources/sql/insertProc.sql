@@ -5,10 +5,19 @@ create procedure addRights(
 	in paramRoleName 	 varchar(20),
 	in paramRightName    varchar(20)
 )
-begin
+myLabel:begin
 	declare procResID int;
+	
+	if (paramRightName = 'NONE') then
+		delete from ResourceACLTable
+		where RoleID = 
+			  (select RoleID from RoleTable where RoleName = paramRoleName);
+		
+		leave myLabel;
+	end if;
+	
 	insert into ResourceTable (ResourceName) values (paramResourceName)
-		on duplicate key update id=last_insert_id(id), ResourceName=paramResourceName;
+		on duplicate key update ResourceID=last_insert_id(ResourceID), ResourceName=paramResourceName;
 	
 	select last_insert_id() into procResID;
 		

@@ -34,29 +34,35 @@ alice alice write alice/aliced2 OVERWRITE1
 false
 alice alice write alice/inexistent_file.txt OVERWRITE3
 false
+root student addRoleToUser READER bob
+true
+root student addRoleToUser WRITER bob
+true
+root student addRoleToUser ALL_ACCESS bob
+true
 bob bob create alice/bobd1 1 smth
 false
 bob bob create alice/bobf1 0 bobfile1
 false
-alice alice change alice/aliced1 RDONLY
+alice alice change alice/aliced1 READER READ
 true
 bob bob create alice/aliced1/bobf1.txt 0 BOB1
 false
-alice alice change alice/aliced1 WRONLY
+alice alice change alice/aliced1 WRITER WRITE
 true
 bob bob create alice/aliced1/bobf2.txt 0 BOB2
-true
-alice alice change alice/aliced1 RDWR
+false
+alice alice change alice/aliced1 ALL_ACCESS READ_WRITE
 true
 bob bob create alice/aliced1/bobf3.txt 0 BOB3
-true
-alice alice change alice/aliced1 NONE
+false
+alice alice change alice/aliced1 READER NONE
 true
 bob bob create alice/aliced1/bobf4.txt 0 BOB4
 false
-alice alice change alice/aliced1 RDWR
+alice alice change alice/aliced1 WRITER READ_WRITE
 true
-alice alice change alice/aliced2/alicef21.txt RDONLY
+alice alice change alice/aliced2/alicef21.txt READER READ
 true
 bob bob create alice/aliced2/bobf5.txt 0 BOB2
 false
@@ -64,7 +70,7 @@ bob bob read alice/aliced2/alicef21.txt
 true
 bob bob write alice/aliced2/alicef21.txt BOBOVER
 false
-alice alice change alice/aliced2/alicef21.txt WRONLY
+alice alice change alice/aliced2/alicef21.txt WRITER WRITE
 true
 bob bob create alice/aliced2/bobf6.txt 0 BOB2
 false
@@ -72,7 +78,7 @@ bob bob read alice/aliced2/alicef21.txt
 false
 bob bob write alice/aliced2/alicef21.txt BOBOVER2
 true
-alice alice change alice/aliced2/alicef21.txt RDWR
+alice alice change alice/aliced2/alicef21.txt READER READ_WRITE
 true
 bob bob create alice/aliced2/bobf7.txt 0 BOB2
 false
@@ -80,7 +86,9 @@ bob bob read alice/aliced2/alicef21.txt
 true
 bob bob write alice/aliced2/alicef21.txt BOBOVER3
 true
-alice alice change alice/aliced2/alicef21.txt NONE
+alice alice change alice/aliced2/alicef21.txt WRITER NONE
+true
+alice alice change alice/aliced2/alicef21.txt READER NONE
 true
 bob bob create alice/aliced2/bobf8.txt 0 BOB2
 false
@@ -88,27 +96,27 @@ bob bob read alice/aliced2/alicef21.txt
 false
 bob bob write alice/aliced2/alicef21.txt BOBOVER4
 false
-alice alice change alice/aliced2/alicef21.txt RDWR
+alice alice change alice/aliced2/alicef21.txt READER READ_WRITE
 true
-alice alice change alice/aliced4/ RDONLY
-true
-bob bob read alice/aliced4
-true
-alice alice change alice/aliced4/ WRONLY
-true
-bob bob read alice/aliced4
-false
-alice alice change alice/aliced4/ RDWR
+alice alice change alice/aliced4/ READER READ
 true
 bob bob read alice/aliced4
 true
-alice alice change alice/aliced4/ NONE
+alice alice change alice/aliced4/ READER WRITE
 true
 bob bob read alice/aliced4
 false
-alice alice change alice/aliced4/ WRONLY
+alice alice change alice/aliced4/ READER READ_WRITE
 true
-alice alice change alice/inexistent_file.txt NONE
+bob bob read alice/aliced4
+true
+alice alice change alice/aliced4/ READER NONE
+true
+bob bob read alice/aliced4
+false
+alice alice change alice/aliced4/ READER WRITE
+true
+alice alice change alice/inexistent_file.txt READER NONE
 false
 bob bob read alice/inexistent_file.txt
 false
@@ -122,7 +130,7 @@ bob bob write alice/aliced1/alicef11.txt BOBOVER
 false
 bob bob write alice/aliced1/bobfile21.txt BOBOVER
 false
-bob bob change alice/aliced3 RDWR
+bob bob change alice/aliced3 READ_WRITE
 false
 bob bob change alice/aliced2/alicef21.txt
 false
